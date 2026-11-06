@@ -352,6 +352,7 @@ void Path3DGizmo::redraw() {
 	if (c.is_null()) {
 		return;
 	}
+	bool read_only = EditorNode::get_singleton()->is_resource_read_only(c);
 
 	debug_material = gizmo_plugin->get_material("path_material", this);
 
@@ -527,7 +528,7 @@ void Path3DGizmo::redraw() {
 			add_lines(tilt_handle_lines, path_tilt_material);
 		}
 
-		if (!Path3DEditorPlugin::singleton->curve_edit->is_pressed() && primary_handle_points.size()) {
+		if (!read_only && !Path3DEditorPlugin::singleton->curve_edit->is_pressed() && primary_handle_points.size()) {
 			// Need to define indices separately.
 			// Point count.
 			const int pc = primary_handle_points.size();
@@ -565,7 +566,7 @@ void Path3DGizmo::redraw() {
 				add_handles(primary_handle_points, handles_material, idx);
 			}
 		}
-		if (secondary_handle_points.size()) {
+		if (!read_only && secondary_handle_points.size()) {
 			add_handles(secondary_handle_points, sec_handles_material, collected_secondary_handle_ids, false, true);
 		}
 		// Draw the gizmo plugin manually, because handles are registered. In which case, the caller code skips drawing the gizmo plugin.
@@ -602,6 +603,11 @@ EditorPlugin::AfterGUIInput Path3DEditorPlugin::forward_3d_gui_input(Camera3D *p
 	if (c.is_null()) {
 		return EditorPlugin::AFTER_GUI_INPUT_PASS;
 	}
+	bool read_only = EditorNode::get_singleton()->is_resource_read_only(c);
+	if (read_only) {
+		return EditorPlugin::AFTER_GUI_INPUT_PASS;
+	}
+
 	Transform3D gt = path->get_global_transform();
 	Transform3D it = gt.affine_inverse();
 
@@ -942,9 +948,16 @@ void Path3DEditorPlugin::_update_toolbar() {
 	if (!path) {
 		return;
 	}
-	bool has_curve = path->get_curve().is_valid();
+	Ref<Curve3D> c = path->get_curve();
+	bool has_curve = c.is_valid();
 	toolbar->set_visible(has_curve);
 	create_curve_button->set_visible(!has_curve);
+
+	bool read_only = has_curve && EditorNode::get_singleton()->is_resource_read_only(c);
+	curve_create->set_disabled(read_only);
+	curve_del->set_disabled(read_only);
+	curve_closed->set_disabled(read_only);
+	curve_clear_points->set_disabled(read_only);
 }
 
 void Path3DEditorPlugin::_notification(int p_what) {
@@ -1197,9 +1210,10 @@ int Path3DGizmoPlugin::subgizmos_intersect_ray(const EditorNode3DGizmo *p_gizmo,
 	ERR_FAIL_NULL_V(path, -1);
 	Ref<Curve3D> curve = path->get_curve();
 	ERR_FAIL_COND_V(curve.is_null(), -1);
+	bool read_only = EditorNode::get_singleton()->is_resource_read_only(curve);
 
 	int ret = -1;
-	if (Path3DEditorPlugin::singleton->curve_edit->is_pressed()) {
+	if (!read_only && Path3DEditorPlugin::singleton->curve_edit->is_pressed()) {
 		for (int idx = 0; idx < curve->get_point_count(); ++idx) {
 			Vector3 pos = path->get_global_transform().xform(curve->get_point_position(idx));
 			if (p_camera->unproject_position(pos).distance_to(p_point) < 20) {
@@ -1223,8 +1237,9 @@ Vector<int> Path3DGizmoPlugin::subgizmos_intersect_frustum(const EditorNode3DGiz
 	ERR_FAIL_NULL_V(path, contained_points);
 	Ref<Curve3D> curve = path->get_curve();
 	ERR_FAIL_COND_V(curve.is_null(), contained_points);
+	bool read_only = EditorNode::get_singleton()->is_resource_read_only(curve);
 
-	if (Path3DEditorPlugin::singleton->curve_edit->is_pressed()) {
+	if (!read_only && Path3DEditorPlugin::singleton->curve_edit->is_pressed()) {
 		for (int idx = 0; idx < curve->get_point_count(); ++idx) {
 			Vector3 pos = path->get_global_transform().xform(curve->get_point_position(idx));
 			bool is_contained_in_frustum = true;
